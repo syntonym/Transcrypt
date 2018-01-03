@@ -2251,7 +2251,8 @@ class Generator (ast.NodeVisitor):
                             decorate = True
 
                 if decorate:
-                    self.emit ('__impl__{}: {}function', node.name, 'async ' if async else '')
+                    implName = '__impl__{}'.format(node.name)
+                    self.emit ('{}: ', implName)
                 else:
                     if isClassMethod:
                         self.emit ('get {} () {{return __getcm__ (this, {}function', self.filterId (node.name),  'async ' if async else '')
@@ -2264,9 +2265,26 @@ class Generator (ast.NodeVisitor):
                 yieldStarLevel = self.indentLevel
 
                 self.emit (' ')
+
+                if decorate:
+                    for decorator in node.decorator_list:
+                        if type (decorator) == ast.Name:
+                            # Simple decorator
+                            if decorator.id not in ("classmethod", "staticmethod"):
+                                self.visit(ast.Name (id = decorator.id, ctx = ast.Load))
+                                self.emit("(")
+                        else:
+                            # Decorator factory
+                            self.visit(decorator)
+                            self.emit("(")
+                    self.emit ('{}function', 'async ' if async else '')
                 self.visit (node.args)
                 emitScopedBody ()
                 self.emit ('}}')
+                if decorate:
+                    for decorator in node.decorator_list:
+                        if not ( type (decorator) == ast.Name and decorator.id in ("classmethod", "staticmethod")):
+                            self.emit(")")
 
                 if self.allowDocAttribs and self.isDocString (node.body [0]):
                     self.emitSetDoc (node.body [0])
@@ -2278,11 +2296,12 @@ class Generator (ast.NodeVisitor):
                     self.emit (',\n')
                     if isClassMethod:
                         self.emit ('get {} () {{return __getcm__ (this, this.__impl__{});}}', self.filterId (node.name), node.name)
+                        self.pushDecorator (node)
                     elif isStaticMethod:
                         self.emit ('get {} () {{return __getsm__ (this, this.__impl__{});}}', self.filterId (node.name), node.name)
+                        self.pushDecorator (node)
                     else:
                         self.emit ('get {} () {{return __get__ (this, this.__impl__{});}}', self.filterId (node.name), node.name)
-                    self.pushDecorator (node)
                 else:
                     if isStaticMethod:
                         self.emit ('}}')
